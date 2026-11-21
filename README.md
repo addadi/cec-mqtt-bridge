@@ -131,6 +131,12 @@ Examples
 You can either copy `config.default.ini` to `config.ini` and adjust its properties, or alternatively declare any of those as environment variables using the format `SECTION_KEY` (e.g., `MQTT_USER`).
 
 
+# Documentation
+
+- [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — runbook: architecture, no-sudo reload, health checks, Kodi coexistence, hardening
+- [`docs/INCIDENT-2026-11-21.md`](docs/INCIDENT-2026-11-21.md) — postmortem of the paho-mqtt 2.x outage and fix
+- [`docs/ECOSYSTEM-2026-11.md`](docs/ECOSYSTEM-2026-11.md) — GitHub ecosystem survey, fork decision, borrowed-ideas backlog
+
 # Interesting links
 * https://github.com/nvella/mqtt-cec
 * http://www.cec-o-matic.com/
