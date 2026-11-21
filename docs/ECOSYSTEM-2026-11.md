@@ -29,7 +29,25 @@ Migration isn't warranted: nothing combines adoption + maintenance + our
 feature depth (per-device power state, volume/mute with feedback, raw tx/rx,
 IR hooks). But the survey surfaced **ideas worth borrowing** (below).
 
-## Ideas to borrow (backlog → bd tickets)
+## Direct forks of ballle98 (surveyed 2026-11-21)
+
+| Fork | ★ | Last push | vs ballle98 master | Notes |
+|---|---|---|---|---|
+| **addadi/cec-mqtt-bridge (ours)** | 0 | 2026-11-21 | ahead 4 | paho-2 migration, venv deploy, docs |
+| **Markkuuss/cec-mqtt-bridge** | 1 | 2026-05-03 | **ahead 15** (branch `integration`) | per-device keypress→MQTT w/ duration+throttle config, optional cec/lirc imports, venv install script, Trixie refactors — **adopt into ours** (bd ticket) |
+| michaeldeborst | 0 | 2025-10-04 | behind 3 | author of upstream PR #20, nothing new |
+| clockbrain | 0 | 2024-03-05 | — | untouched since 2024 |
+
+## Why we forked ballle98, not archived michaelarnauts (157★)
+
+The upstream's stars are frozen — archived 2023-09, no issues/PRs possible.
+ballle98's master contains ~2 years of post-archive fixes (CEC-adapter-on-vc4
+fix #19, install-docs #17, PR #20) that a michaelarnauts fork would lack or
+duplicate. We sit in the *same* fork network (michaelarnauts → ballle98 →
+addadi), so we remain discoverable from the archived repo's fork tree, while
+keeping a live upstream we can PR into. Traction comes from PRing ballle98
+(paho-2 fix + Markkuuss's keypress), not from the archived parent.
+
 
 | Idea | Source | Value for us |
 |---|---|---|
