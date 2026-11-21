@@ -101,7 +101,28 @@ The bridge publishes to the following topics:
 
 `id` is the address (0-15) of the device on the CEC-bus.
 
-## Examples
+## Deployment (2026-11 modernization)
+
+The bridge now requires **paho-mqtt ≥ 2.0** (callback API v2) and is deployed
+from a dedicated venv to survive system-Python drift:
+
+```bash
+# one-time setup (the libcec `cec` module comes from the system package,
+# hence --system-site-packages)
+python3 -m venv --system-site-packages ~/venvs/cec-mqtt-bridge
+~/venvs/cec-mqtt-bridge/bin/pip install paho-mqtt -e ~/src/cec-mqtt-bridge-ballle98
+
+# ~/.local/bin/cec-mqtt-bridge is a shim so the stock systemd unit keeps working:
+#   #!/bin/sh
+#   exec env -u PYTHONPATH ~/venvs/cec-mqtt-bridge/bin/cec-mqtt-bridge "$@"
+```
+
+Reliability features: MQTT auto-reconnect with backoff (1–60 s), CEC adapter
+open retry (6 × 10 s — covers boot-time contention e.g. with Kodi), retained
+`bridge/status` birth/offline messages. See `cec-mqtt-bridge.service` for the
+reference unit.
+
+Examples
 * `mosquitto_pub -t media/cec/volup -m ''`
 * `mosquitto_pub -t media/cec/tx -m '15:44:42,15:45'`
 

@@ -1,0 +1,22 @@
+[Unit]
+Description=cec-mqtt-bridge
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=addadi
+WorkingDirectory=/home/addadi/src/cec-mqtt-bridge-ballle98
+Environment="PATH=/home/addadi/.local/bin:/usr/local/bin:/usr/bin:/bin"
+# Dedicated venv (python3.14, --system-site-packages for the libcec binding).
+# NOTE: the currently LIVE unit still ExecStarts ~/.local/bin/cec-mqtt-bridge,
+# which is a shim that execs the venv binary with PYTHONPATH cleared.
+# Installing this file directly (sudo cp + daemon-reload) removes the need for the shim.
+ExecStart=/home/addadi/venvs/cec-mqtt-bridge/bin/cec-mqtt-bridge -c -f /home/addadi/src/cec-mqtt-bridge-ballle98/config.ini
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
