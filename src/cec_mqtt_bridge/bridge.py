@@ -63,6 +63,8 @@ class Bridge:
         self.mqtt_client.on_connect = self.mqtt_on_connect
         self.mqtt_client.on_disconnect = self.mqtt_on_disconnect
         self.mqtt_client.on_message = mqtt_on_message
+        self.mqtt_client.on_publish = self.mqtt_on_publish
+        self.mqtt_client.on_subscribe = self.mqtt_on_subscribe
         self.mqtt_client.reconnect_delay_set(min_delay=1, max_delay=60)
         if self.config["mqtt"]["user"]:
             self.mqtt_client.username_pw_set(
@@ -209,7 +211,18 @@ class Bridge:
         self, _client: mqtt, _userdata, _disconnect_flags, reason_code, _properties
     ):
         """MQTT on disconnect callback (paho-mqtt >= 2.0 callback API)"""
-        LOGGER.warning("Disconnected from MQTT broker: %s", reason_code)
+        if reason_code == 0:
+            LOGGER.info("Disconnected cleanly")
+        else:
+            LOGGER.warning("Disconnected from MQTT broker: %s", reason_code)
+
+    def mqtt_on_publish(self, _client: mqtt, _userdata, mid, reason_code, _properties):
+        """MQTT on publish callback (paho-mqtt >= 2.0 callback API)"""
+        LOGGER.debug("Published (mid=%s) reason_code=%s", mid, reason_code)
+
+    def mqtt_on_subscribe(self, _client: mqtt, _userdata, mid, reason_codes, _properties):
+        """MQTT on subscribe callback (paho-mqtt >= 2.0 callback API)"""
+        LOGGER.debug("Subscribed (mid=%s) reason_codes=%s", mid, reason_codes)
 
     def mqtt_publish(self, topic, message=None, qos=0, retain=True):
         """Publish a MQTT message prefixed with bridge prefix
@@ -244,6 +257,10 @@ class Bridge:
         LOGGER.debug("Command received: %s (%s)", topic, message.payload)
 
         if topic[0] == "cec":
+            # Guard: MQTT may deliver commands while CEC init/retry is still running
+            if not hasattr(self, "cec_class"):
+                LOGGER.warning("CEC not initialised yet; ignoring %s", message.topic)
+                return
             if topic[1] == "device":
                 device = int(topic[2])
                 if topic[3] == "power":

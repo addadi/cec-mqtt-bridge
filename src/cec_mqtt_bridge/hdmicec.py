@@ -44,6 +44,8 @@ class HdmiCec:
         self.volume_update = threading.Event()
         self.volume_update.clear()
         self._key_lock = threading.Lock()
+        self._power_status_events = {}
+        self._power_status_values = {}
 
         self.cec_config = cec.libcec_configuration()
         self.cec_config.strDeviceName = name
@@ -110,12 +112,14 @@ class HdmiCec:
         # Send raw command to mqtt
         self._mqtt_send('cec/rx', cmd[3:])
 
-        if not self.refreshing:
-            if opcode == cec.CEC_OPCODE_REPORT_POWER_STATUS:
-                power = int(cmd[9:], base=16)
-                self._mqtt_send(f'cec/device/{initiator}/power',
-                                self.cec_client.PowerStatusToString(power))
-            elif opcode == cec.CEC_OPCODE_DEVICE_VENDOR_ID:
+        if opcode == cec.CEC_OPCODE_REPORT_POWER_STATUS:
+            power = int(cmd[9:], base=16)
+            power_status = self.cec_client.PowerStatusToString(power)
+            self._power_status_values[initiator] = power_status
+            self._power_status_events.setdefault(initiator, threading.Event()).set()
+            self._mqtt_send(f'cec/device/{initiator}/power', power_status)
+        elif not self.refreshing:
+            if opcode == cec.CEC_OPCODE_DEVICE_VENDOR_ID:
                 vendor_id = int((cmd[9:]).replace(':',''), base=16)
                 self._mqtt_send(f'cec/device/{initiator}/vendor',
                                 self.cec_client.VendorIdToString(vendor_id))
@@ -138,14 +142,78 @@ class HdmiCec:
     def power_on(self, device: int):
         """Power on the specified device."""
         LOGGER.debug('Power on device %d', device)
-        self._mqtt_send(f'cec/device/{device}/power', 'on')
         self.cec_client.PowerOnDevices(device)
+        threading.Thread(
+            target=self._publish_verified_power_status,
+            args=(device,),
+            daemon=True,
+        ).start()
 
     def power_off(self, device: int):
         """Power off the specified device."""
         LOGGER.debug('Power off device %d', device)
-        self._mqtt_send(f'cec/device/{device}/power', 'standby')
         self.cec_client.StandbyDevices(device)
+        threading.Thread(
+            target=self._publish_verified_power_status,
+            args=(device,),
+            daemon=True,
+        ).start()
+
+    def _query_power_status(self, device: int, timeout: float = 1.0,
+                            publish_unknown: bool = False):
+        """Ask a device for its power status and wait for the event reply."""
+        power_event = self._power_status_events.setdefault(device, threading.Event())
+        power_event.clear()
+        self.tx_command('8f', device)
+
+        if power_event.wait(max(timeout, 0.1)):
+            return self._power_status_values.get(device)
+
+        LOGGER.debug('No power status response from device %d within %.1fs',
+                     device, timeout)
+        if publish_unknown:
+            self._mqtt_send(f'cec/device/{device}/power', 'unknown')
+        return None
+
+    def _publish_verified_power_status(self, device: int, initial_delay: float = 1.5,
+                                       poll_gap: float = 1.0, max_polls: int = 8):
+        """Poll power status after a command; publish only when stable."""
+        time.sleep(max(initial_delay, 0.0))
+
+        previous_status = None
+        stable_reads = 0
+        last_status = None
+
+        for poll_idx in range(max(1, max_polls)):
+            current_status = self._query_power_status(device, timeout=poll_gap,
+                                                      publish_unknown=False)
+            if current_status is None:
+                stable_reads = 0
+                previous_status = None
+                if poll_idx < max_polls - 1:
+                    time.sleep(max(poll_gap, 0.0))
+                continue
+
+            last_status = current_status
+
+            if current_status == previous_status:
+                stable_reads += 1
+            else:
+                stable_reads = 1
+                previous_status = current_status
+
+            if stable_reads >= 2:
+                LOGGER.debug('Verified stable power status for device %d after '
+                             'poll %d: %s', device, poll_idx + 1, current_status)
+                self._mqtt_send(f'cec/device/{device}/power', current_status)
+                return
+
+            if poll_idx < max_polls - 1:
+                time.sleep(max(poll_gap, 0.0))
+
+        LOGGER.warning('Power status for device %d remained unstable after %d '
+                       'polls (last=%s); skipping forced publish',
+                       device, max_polls, last_status)
 
     def _parse_key_code(self, key: str) -> int:
         key_value = key.strip()
@@ -247,7 +315,8 @@ class HdmiCec:
             # Wait for this update to arrive
             LOGGER.debug('Waiting for response...')
             if not self.volume_update.wait(0.2):
-                LOGGER.warning('No response received. Retrying...')
+                attempts += 1
+                LOGGER.warning('No response from AVR (%d/10). Retrying...', attempts)
                 continue
 
             # Read the update
@@ -314,23 +383,18 @@ class HdmiCec:
 
         LOGGER.debug('Refreshing HDMI-CEC...')
         self.refreshing = True
-        for device in self.devices:
-            # Get power status values of discovered devices from ceclib
-            # This will setting unknown power state when device does not respond.
-            physical_address = self.cec_client.GetDevicePhysicalAddress(device)
-            if physical_address != 0xFFFF:
-                power = self.cec_client.GetDevicePowerStatus(device)
-                power_str = self.cec_client.PowerStatusToString(power)
-                LOGGER.debug('device %d %04x %-12s power %d %s', device, physical_address,
-                            self.cec_client.LogicalAddressToString(device), power,
-                            power_str)
-                self._mqtt_send(f'cec/device/{device}/power', power_str)
+        try:
+            for device in self.devices:
+                physical_address = self.cec_client.GetDevicePhysicalAddress(device)
+                if physical_address != 0xFFFF:
+                    self._query_power_status(device, publish_unknown=True)
 
-        # Ask AVR to send us an audio status update
-        mute, volume = self.decode_volume(self.cec_client.AudioStatus())
-        self._mqtt_send('cec/audio/volume', volume)
-        self._mqtt_send('cec/audio/mute', 'on' if mute else 'off')
-        self.refreshing = False
+            # Ask AVR to send us an audio status update
+            mute, volume = self.decode_volume(self.cec_client.AudioStatus())
+            self._mqtt_send('cec/audio/volume', volume)
+            self._mqtt_send('cec/audio/mute', 'on' if mute else 'off')
+        finally:
+            self.refreshing = False
 
     def scan(self):
         """scan for devices on the HDMI CEC bus"""
