@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "cec_mqtt_bridge_ballle98",
+  "project_id": "33fd28d6-49d0-4c5b-a19d-1a25b7c368d4"
+}
