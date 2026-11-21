@@ -1,8 +1,10 @@
 # Operations runbook — cec-mqtt-bridge on mozart
 
 Single canonical deployment of the CEC↔MQTT bridge. Repo:
-`~/src/cec-mqtt-bridge-ballle98` (fork lineage: michaelarnauts → ballle98 →
-local modernization, see `ECOSYSTEM-2026-11.md`).
+`~/src/cec-mqtt-bridge-ballle98` — **canonical GitHub home: your fork
+`github.com/addadi/cec-mqtt-bridge`** (`origin`, SSH). `upstream` = ballle98's
+fork (HTTPS, pull-only). Lineage: michaelarnauts → ballle98 → addadi, see
+`ECOSYSTEM-2026-11.md`.
 
 ## Runtime architecture (as of 2026-11-21)
 
@@ -81,6 +83,22 @@ sudo cp ~/src/cec-mqtt-bridge-ballle98/cec-mqtt-bridge.service /etc/systemd/syst
 sudo systemctl daemon-reload && sudo systemctl restart cec-mqtt-bridge
 rm ~/.local/bin/cec-mqtt-bridge    # shim no longer needed
 ```
+
+## Pushing to GitHub
+
+The GitHub key is `~/.ssh/id_rsa.git` (passphrase-protected; registered on the
+`addadi` account). Notes learned 2026-11-21:
+
+- gpg-agent's ssh emulation **refuses** external (non-GnuPG) keys — don't use
+  `SSH_AUTH_SOCK=/run/user/1001/gnupg/S.gpg-agent.ssh ssh-add ...`.
+- Kernel `yama.ptrace_scope` blocks other sessions from borrowing your agent
+  socket, so background/agent processes can't push with your interactive agent.
+- Working pattern (any terminal):
+  ```bash
+  eval "$(ssh-agent -s)" && ssh-add ~/.ssh/id_rsa.git
+  git -C ~/src/cec-mqtt-bridge-ballle98 push origin master
+  # agent lingers until reboot; harmless
+  ```
 
 ## Known-stale artifacts (removal pending user nod)
 

@@ -40,11 +40,10 @@ IR hooks). But the survey surfaced **ideas worth borrowing** (below).
 | **CI: multi-arch Docker images, signed releases + SBOM** | splattner | repo already has a Dockerfile; add GH Actions workflow |
 | Volume scale normalization (`volume_correction` currently 1) | internal observation (published `127`) | AVR-relative volume instead of raw 0–127 CEC scale |
 
-## GitHub fork decision (2026-11-21)
+## GitHub fork decision — EXECUTED 2026-11-21
 
-Recommended: **yes, fork ballle98/cec-mqtt-bridge into the owner's GitHub
-account** — durable home for our 3 modernization commits (currently
-local-only), keeps lineage (`gh` shows forked-from chain), enables the
-optional upstream PR to ballle98, and gives the venv's `origin` a pushable
-remote. SSH keys exist on mozart; GitHub's host keys verified against
-published fingerprints.
+**Done:** fork created at `github.com/addadi/cec-mqtt-bridge`, all 4
+modernization commits pushed (master = `668d5a7`), remotes normalized
+(`origin` = addadi fork over SSH, `upstream` = ballle98 over HTTPS).
+Key `id_rsa.git` verified registered on the account. Optional follow-up:
+open an upstream PR to ballle98 with the paho-mqtt 2.x migration.
