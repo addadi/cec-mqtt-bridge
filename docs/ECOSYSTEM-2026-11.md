@@ -49,6 +49,8 @@ keeping a live upstream we can PR into. Traction comes from PRing ballle98
 (paho-2 fix + Markkuuss's keypress), not from the archived parent.
 
 
+## Ideas to borrow (backlog → bd tickets)
+
 | Idea | Source | Value for us |
 |---|---|---|
 | **Home Assistant MQTT discovery** — publish `homeassistant/…/config` payloads for TV/AVR power, volume, mute | RobertMe & splattner cec2mqtt | entities auto-appear in HA instead of hand-built automations; biggest UX win |

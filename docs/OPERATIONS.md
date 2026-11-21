@@ -100,6 +100,33 @@ The GitHub key is `~/.ssh/id_rsa.git` (passphrase-protected; registered on the
   # agent lingers until reboot; harmless
   ```
 
+## Backup coverage (verified 2026-11-21)
+
+- **restic fleet-backup** (root timer, 00:15 daily → hub): already covers
+  `~/src` (includes `config.ini` — gitignored, never on GitHub), `/etc`
+  (live unit), `~/.local` (launcher shim), `~/.ssh`, `~/.pi`, `~/.beads`.
+  **Not covered:** `~/venvs` — rebuildable in one command (see below), acceptable.
+- **bach backup agent**: a config bundle (`config.ini`, unit, shim, defaults,
+  all `docs/`) is shipped to `bach:~/.local/share/backup-inbox/`
+  (`cec-mqtt-configs-20261121.tar.gz`, ssh via `id_rsa.brahms`).
+- Rebuild-from-backup recipe: restore repo from GitHub or backup, then
+  `python3 -m venv --system-site-packages ~/venvs/cec-mqtt-bridge &&
+  ~/venvs/cec-mqtt-bridge/bin/pip install paho-mqtt -e ~/src/cec-mqtt-bridge-ballle98`.
+
+## Cleanup ledger (2026-11-21)
+
+| Removed | Reason |
+|---|---|
+| `~/.local/lib/python3.13/site-packages/cec_mqtt_bridge{,-0.0.1.dist-info}` | stale pip `--user` install — the incident's import-shadowing source |
+| `/tmp/forklist.txt` | temp file from the 46-fork sweep |
+| `~/.ssh/known_hosts.old` | ssh-keygen leftover from 2023 (dated backup kept) |
+| `dist/`, `build/` in repo | stale untracked build artifacts (gitignored anyway) |
+
+Kept intentionally: `~/.local/bin/cec-mqtt-bridge` (shim = live launcher),
+`~/.beads.bak-20260105` (pre-repair bd DB backup), `~/.ssh/known_hosts.bak-20261121`.
+No duplicate CEC trees exist — single canonical repo with remotes
+`origin` (addadi) / `upstream` (ballle98) / `markkuuss` (donor).
+
 ## Known-stale artifacts (removal pending user nod)
 
 - `~/.local/lib/python3.13/site-packages/cec_mqtt_bridge{,-0.0.1.dist-info}` —
