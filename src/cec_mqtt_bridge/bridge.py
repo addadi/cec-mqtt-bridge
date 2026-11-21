@@ -54,11 +54,16 @@ class Bridge:
             )
             thread.start()
 
-        # Setup MQTT
+        # Setup MQTT (paho-mqtt >= 2.0 callback API)
         LOGGER.info("Initialising MQTT...")
-        self.mqtt_client = mqtt.Client(self.config["mqtt"]["name"])
+        self.mqtt_client = mqtt.Client(
+            mqtt.CallbackAPIVersion.VERSION2,
+            client_id=self.config["mqtt"]["name"],
+        )
         self.mqtt_client.on_connect = self.mqtt_on_connect
+        self.mqtt_client.on_disconnect = self.mqtt_on_disconnect
         self.mqtt_client.on_message = mqtt_on_message
+        self.mqtt_client.reconnect_delay_set(min_delay=1, max_delay=60)
         if self.config["mqtt"]["user"]:
             self.mqtt_client.username_pw_set(
                 self.config["mqtt"]["user"], password=self.config["mqtt"]["password"]
@@ -94,15 +99,29 @@ class Bridge:
 
         self.mqtt_client.loop_start()
 
-        # Setup HDMI-CEC
+        # Setup HDMI-CEC (with retry: adapter may be busy at boot, e.g. Kodi)
         if int(self.config["cec"]["enabled"]) == 1:
             LOGGER.info("Initialising CEC...")
-            self.cec_class = hdmicec.HdmiCec(
-                port=self.config["cec"]["port"],
-                name=self.config["cec"]["name"],
-                devices=[int(x) for x in self.config["cec"]["devices"].split(",")],
-                mqtt_send=self.mqtt_publish,
-            )
+            cec_tries = 6
+            while True:
+                try:
+                    self.cec_class = hdmicec.HdmiCec(
+                        port=self.config["cec"]["port"],
+                        name=self.config["cec"]["name"],
+                        devices=[int(x) for x in self.config["cec"]["devices"].split(",")],
+                        mqtt_send=self.mqtt_publish,
+                    )
+                    break
+                except ConnectionError as err:
+                    if cec_tries <= 0:
+                        raise
+                    cec_tries -= 1
+                    LOGGER.error(
+                        "CEC adapter open failed (%s); retrying in 10s (%d tries left)",
+                        err,
+                        cec_tries,
+                    )
+                    time.sleep(10)
 
         # Setup IR
         if int(self.config["ir"]["enabled"]) == 1:
@@ -146,19 +165,22 @@ class Bridge:
 
         return config
 
-    def mqtt_on_connect(self, client: mqtt, _userdata, _flags, ret):
-        """MQTT on connect callback
+    def mqtt_on_connect(
+        self, client: mqtt, _userdata, _connect_flags, reason_code, _properties
+    ):
+        """MQTT on connect callback (paho-mqtt >= 2.0 callback API)
 
         Args:
-            client (mqtt): _description_
-            _userdata (_type_): _description_
-            _flags (_type_): _description_
-            ret (_type_): _description_
+            client (mqtt): mqtt client
+            _userdata: not used
+            _connect_flags: not used
+            reason_code (ReasonCode): connection result
+            _properties: not used
         """
-        if ret == 0:
+        if reason_code == 0:
             LOGGER.info("Connected successfully")
         else:
-            LOGGER.error("Connection failed with code %d", ret)
+            LOGGER.error("Connection failed: %s", reason_code)
 
         # Subscribe to CEC commands
         if int(self.config["cec"]["enabled"]) == 1:
@@ -179,6 +201,12 @@ class Bridge:
 
         # Publish birth message
         self.mqtt_publish("bridge/status", "online", qos=1, retain=True)
+
+    def mqtt_on_disconnect(
+        self, _client: mqtt, _userdata, _disconnect_flags, reason_code, _properties
+    ):
+        """MQTT on disconnect callback (paho-mqtt >= 2.0 callback API)"""
+        LOGGER.warning("Disconnected from MQTT broker: %s", reason_code)
 
     def mqtt_publish(self, topic, message=None, qos=0, retain=True):
         """Publish a MQTT message prefixed with bridge prefix
@@ -263,9 +291,12 @@ class Bridge:
             LOGGER.info("Cleanup IR...")
             self.ir_class.stop_event.set()
             self.ir_class.lirc_thread.join()
-        self.mqtt_client.loop_stop()
         self.mqtt_publish("bridge/status", "offline", qos=1, retain=True)
-        self.mqtt_client.disconnect()
+        time.sleep(0.5)  # let the network loop flush the offline message
+        try:
+            self.mqtt_client.disconnect()
+        finally:
+            self.mqtt_client.loop_stop()
 
 
 def main():
